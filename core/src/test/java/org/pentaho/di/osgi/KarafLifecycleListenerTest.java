@@ -1,23 +1,58 @@
 package org.pentaho.di.osgi;
 
+import org.junit.Before;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
+import org.pentaho.di.osgi.service.notifier.DelayedServiceNotifierListener;
 import org.pentaho.osgi.api.IKarafBlueprintWatcher;
 import org.pentaho.osgi.api.IKarafFeatureWatcher;
 import org.pentaho.platform.servicecoordination.api.IPhasedLifecycleEvent;
+import org.pentaho.platform.servicecoordination.api.IPhasedLifecycleManager;
 import org.pentaho.platform.servicecoordination.impl.BaseCountdownLatchLifecycleManager;
 
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.*;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.timeout;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 /**
  * Created by nbaker on 9/23/15.
  */
 public class KarafLifecycleListenerTest {
+  private int timeout;
+  private OSGIPluginTracker osgiPluginTracker;
+  private KarafLifecycleListener karafLifecycleListener;
+  private BundleContext bundleContext;
+  private ServiceReference<IKarafFeatureWatcher> featureWatcherServiceReference;
+  private IKarafFeatureWatcher iKarafFeatureWatcher;
+  private ServiceReference<IKarafBlueprintWatcher> blueprintWatcherServiceReference;
+  private IKarafBlueprintWatcher iKarafBlueprintWatcher;
+
+  @Before
+  public void setup() {
+    timeout = 500;
+    osgiPluginTracker = mock( OSGIPluginTracker.class );
+    karafLifecycleListener = new KarafLifecycleListener( timeout, osgiPluginTracker );
+
+    bundleContext = mock( BundleContext.class );
+    karafLifecycleListener.setBundleContext( bundleContext );
+
+    featureWatcherServiceReference = mock( ServiceReference.class );
+    iKarafFeatureWatcher = mock( IKarafFeatureWatcher.class );
+    when( bundleContext.getService( featureWatcherServiceReference ) ).thenReturn( iKarafFeatureWatcher );
+
+    blueprintWatcherServiceReference = mock( ServiceReference.class );
+    iKarafBlueprintWatcher = mock( IKarafBlueprintWatcher.class );
+    when( bundleContext.getService( blueprintWatcherServiceReference ) ).thenReturn( iKarafBlueprintWatcher );
+  }
 
   @Test
   public void testSatisfied() throws Exception {
@@ -110,5 +145,25 @@ public class KarafLifecycleListenerTest {
     // sure that happens
     t.join();
     assertEquals( 2, lifecycleManager.getPhase() );
+  }
+
+  @Test
+  public void testDelayedServiceNotifierListener() {
+    IPhasedLifecycleEvent<KettleLifecycleEvent> iPhasedLifecycleEvent = mock( IPhasedLifecycleEvent.class );
+    when( iPhasedLifecycleEvent.getNotificationObject() ).thenReturn( KettleLifecycleEvent.INIT );
+
+    when( bundleContext.getServiceReference( IKarafFeatureWatcher.class ) ).thenReturn( featureWatcherServiceReference );
+    when( bundleContext.getServiceReference( IKarafBlueprintWatcher.class ) ).thenReturn( blueprintWatcherServiceReference );
+
+    when( osgiPluginTracker.getOutstandingServiceNotifierListeners() ).thenReturn( 1 ).thenReturn( 0 );
+    karafLifecycleListener.onPhaseChange( iPhasedLifecycleEvent );
+    ArgumentCaptor<DelayedServiceNotifierListener> delayedServiceNotifierListenerArgumentCaptor =
+      ArgumentCaptor.forClass( DelayedServiceNotifierListener.class );
+    verify( osgiPluginTracker, timeout( (int) TimeUnit.SECONDS.toMillis( 5 ) ) ).addDelayedServiceNotifierListener( delayedServiceNotifierListenerArgumentCaptor.capture() );
+    verify( iPhasedLifecycleEvent, never() ).accept();
+    delayedServiceNotifierListenerArgumentCaptor.getValue().onRun( null, null );
+    verify( iPhasedLifecycleEvent ).accept();
+    delayedServiceNotifierListenerArgumentCaptor.getValue().onRun( null, null );
+    verify( iPhasedLifecycleEvent, times( 1 ) ).accept();
   }
 }

@@ -1,8 +1,11 @@
 package org.pentaho.di.osgi;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.osgi.framework.BundleContext;
 import org.osgi.framework.ServiceReference;
 import org.pentaho.di.core.util.ExecutorUtil;
+import org.pentaho.di.osgi.service.lifecycle.LifecycleEvent;
+import org.pentaho.di.osgi.service.notifier.DelayedServiceNotifierListener;
 import org.pentaho.osgi.api.IKarafBlueprintWatcher;
 import org.pentaho.osgi.api.IKarafFeatureWatcher;
 import org.pentaho.platform.servicecoordination.api.IPhasedLifecycleEvent;
@@ -22,17 +25,26 @@ public class KarafLifecycleListener implements IPhasedLifecycleListener<KettleLi
   private static KarafLifecycleListener INSTANCE = new KarafLifecycleListener( );
   private static Logger logger = LoggerFactory.getLogger( KarafLifecycleListener.class );
   private final long timeout;
+  private final OSGIPluginTracker osgiPluginTracker;
   private AtomicBoolean listenerActive = new AtomicBoolean( false );
   private AtomicBoolean initialized = new AtomicBoolean( false );
   private BundleContext bundleContext;
   private IPhasedLifecycleEvent<KettleLifecycleEvent> event;
 
+  @VisibleForTesting
   KarafLifecycleListener() {
     this( calculateTimeout() );
   }
 
+  @VisibleForTesting
   KarafLifecycleListener( long timeout ) {
+    this( timeout, OSGIPluginTracker.getInstance() );
+  }
+
+  @VisibleForTesting
+  KarafLifecycleListener( long timeout, OSGIPluginTracker osgiPluginTracker ) {
     this.timeout = timeout;
+    this.osgiPluginTracker = osgiPluginTracker;
   }
 
   private static long calculateTimeout() {
@@ -129,13 +141,25 @@ public class KarafLifecycleListener implements IPhasedLifecycleListener<KettleLi
             logger.error( "Error in Blueprint Watcher", e );
           }
 
-          event.accept();
+          final AtomicBoolean accepted = new AtomicBoolean( false );
+          DelayedServiceNotifierListener delayedServiceNotifierListener = new DelayedServiceNotifierListener() {
+            @Override public void onRun( LifecycleEvent lifecycleEvent, Object serviceObject ) {
+              if ( osgiPluginTracker.getOutstandingServiceNotifierListeners() == 0 && !accepted.getAndSet( true ) ) {
+                logger.debug( "Done waiting on delayed service notifiers" );
+                event.accept();
+                osgiPluginTracker.removeDelayedServiceNotifierListener( this );
+              }
+            }
+          };
+
+          logger.debug( "About to start waiting on delayed service notifiers" );
+          osgiPluginTracker.addDelayedServiceNotifierListener( delayedServiceNotifierListener );
+          delayedServiceNotifierListener.onRun( null, null );
         }
       } );
       thread.setDaemon( true );
       thread.start();
       initialized.set( true );
-
     }
   }
 
