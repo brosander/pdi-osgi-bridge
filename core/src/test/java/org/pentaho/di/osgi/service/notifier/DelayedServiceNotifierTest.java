@@ -61,6 +61,7 @@ public class DelayedServiceNotifierTest {
     proxyUnwrapper = mock( ProxyUnwrapper.class );
     delayedServiceNotifierListener = mock( DelayedServiceNotifierListener.class );
     clazz = Map.class;
+    throw new RuntimeException(  );
   }
 
   @Test

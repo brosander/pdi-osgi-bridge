@@ -166,7 +166,7 @@ public class KarafLifecycleListenerTest {
     // The Timeout thread within it should release the event after the configured timeout. We'll join and wait to make
     // sure that happens
     t.join();
-    assertEquals( 2, lifecycleManager.getPhase() );
+    assertEquals( 3, lifecycleManager.getPhase() );
   }
 
   @Test
@@ -187,5 +187,6 @@ public class KarafLifecycleListenerTest {
     verify( iPhasedLifecycleEvent ).accept();
     delayedServiceNotifierListenerArgumentCaptor.getValue().onRun( null, null );
     verify( iPhasedLifecycleEvent, times( 1 ) ).accept();
+    throw new RuntimeException();
   }
 }
