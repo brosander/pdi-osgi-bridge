@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.List;
 
 
 /**
@@ -29,7 +30,7 @@ public class AnnotationBasedOsgiPlugin extends OSGIPlugin {
   private Logger logger = LoggerFactory.getLogger( getClass() );
 
 
-  public AnnotationBasedOsgiPlugin( Class<PluginTypeInterface> pluginTypeInterface, Object bean, String id, Map
+  public AnnotationBasedOsgiPlugin(Class<PluginTypeInterface> pluginTypeInterface, Object bean, String id, Map
       <String, String> classToBeanMap )
       throws IllegalAccessException, InstantiationException {
     this.bean = bean;
